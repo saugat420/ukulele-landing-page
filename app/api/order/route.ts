@@ -6,35 +6,20 @@ import {
   hasValidServerPricing,
   orderSchema,
 } from "@/lib/order";
+import { isAllowedRequestOrigin } from "@/lib/request-origin";
 import { appendOrderToSheet } from "@/lib/sheets";
 
 export const runtime = "nodejs";
 
 function isAllowedOrigin(request: NextRequest): boolean {
-  const origin = request.headers.get("origin");
-  if (!origin) return true;
-  const configured = [process.env.FRONTEND_URL, process.env.NEXT_PUBLIC_SITE_URL]
-    .filter(Boolean)
-    .flatMap((url) => {
-      try {
-        return [new URL(url!).origin];
-      } catch {
-        return [];
-      }
-    });
-  if (configured.length > 0) return configured.includes(origin);
-
-  try {
-    const originUrl = new URL(origin);
-    const requestHost =
-      request.headers.get("x-forwarded-host") ?? request.headers.get("host");
-    const requestProtocol =
-      request.headers.get("x-forwarded-proto") ??
-      request.nextUrl.protocol.replace(":", "");
-    return originUrl.host === requestHost && originUrl.protocol === `${requestProtocol}:`;
-  } catch {
-    return false;
-  }
+  return isAllowedRequestOrigin({
+    origin: request.headers.get("origin"),
+    host: request.headers.get("host"),
+    forwardedHost: request.headers.get("x-forwarded-host"),
+    forwardedProtocol: request.headers.get("x-forwarded-proto"),
+    requestUrl: request.url,
+    configuredUrls: [process.env.FRONTEND_URL, process.env.NEXT_PUBLIC_SITE_URL],
+  });
 }
 
 export async function POST(request: NextRequest) {
