@@ -24,6 +24,7 @@ import {
   isDeliveryArea,
   PRODUCT,
 } from "@/lib/product";
+import { metaPurchaseConfirmationKey } from "@/lib/meta-purchase";
 
 type FormValues = {
   fullName: string;
@@ -140,6 +141,10 @@ export function CheckoutForm() {
         deliveryFee: String(result.order.deliveryFee),
         totalPrice: String(result.order.totalPrice),
       });
+      window.sessionStorage.setItem(
+        metaPurchaseConfirmationKey(result.order.orderId),
+        "confirmed",
+      );
       router.push(`/thank-you?${params.toString()}`);
     } catch {
       setError(

@@ -3,8 +3,60 @@
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import {
+  getMetaPurchaseEvent,
+  metaPurchaseConfirmationKey,
+} from "@/lib/meta-purchase";
 
 const META_PIXEL_ID = "893398047197123";
+const trackedPurchaseIds = new Set<string>();
+
+function facebookPixel() {
+  return (window as Window & { fbq?: (...args: unknown[]) => void }).fbq;
+}
+
+function trackPurchaseIfConfirmed() {
+  if (window.location.pathname !== "/thank-you") return;
+
+  const purchase = getMetaPurchaseEvent(window.location.search);
+  if (!purchase || trackedPurchaseIds.has(purchase.eventId)) return;
+
+  try {
+    if (
+      window.sessionStorage.getItem(
+        metaPurchaseConfirmationKey(purchase.eventId),
+      ) !== "confirmed"
+    ) {
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  const storageKey = `meta-purchase:${purchase.eventId}`;
+  try {
+    if (window.localStorage.getItem(storageKey) === "tracked") {
+      trackedPurchaseIds.add(purchase.eventId);
+      return;
+    }
+  } catch {
+    // Tracking can continue when browser storage is unavailable.
+  }
+
+  const pixel = facebookPixel();
+  if (!pixel) return;
+
+  pixel("track", "Purchase", purchase.parameters, {
+    eventID: purchase.eventId,
+  });
+  trackedPurchaseIds.add(purchase.eventId);
+
+  try {
+    window.localStorage.setItem(storageKey, "tracked");
+  } catch {
+    // The in-memory set still prevents duplicate events during this page session.
+  }
+}
 
 export function MetaPixel() {
   const pathname = usePathname();
@@ -14,15 +66,17 @@ export function MetaPixel() {
     if (previousPathname.current === pathname) return;
     previousPathname.current = pathname;
 
-    const facebookPixel = (
-      window as Window & { fbq?: (...args: unknown[]) => void }
-    ).fbq;
-    facebookPixel?.("track", "PageView");
+    facebookPixel()?.("track", "PageView");
+    trackPurchaseIfConfirmed();
   }, [pathname]);
 
   return (
     <>
-      <Script id="meta-pixel" strategy="afterInteractive">
+      <Script
+        id="meta-pixel"
+        strategy="afterInteractive"
+        onReady={trackPurchaseIfConfirmed}
+      >
         {`!function(f,b,e,v,n,t,s)
 {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
 n.callMethod.apply(n,arguments):n.queue.push(arguments)};
